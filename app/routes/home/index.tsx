@@ -129,7 +129,7 @@ function RecommendedProducts({
       className="recommended-products"
       aria-labelledby="recommended-products"
     >
-      <h1>Oziva Prod Demo</h1>
+      <h1>Oziva stagging new feature Demo</h1>
       <h2 id="recommended-products">Recommended products</h2>
       <Suspense fallback={<div>Loading...</div>}>
         <Await resolve={products}>
