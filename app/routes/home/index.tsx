@@ -45,7 +45,7 @@ export default function Homepage() {
   return (
     <div className="home">
       {data.isShopLinked ? null : <MockShopNotice />}
-      <h1>Oziva demo</h1>
+      <h1>Oziva demo UAT</h1>
       <FeaturedCollection collection={data.featuredCollection} />
       {data.recommendedProducts && (
         <RecommendedProducts products={data.recommendedProducts} />
