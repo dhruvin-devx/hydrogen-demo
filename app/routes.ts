@@ -46,6 +46,7 @@ export default hydrogenRoutes([
     route('policies/:handle',                 'routes/content/policies/$handle.tsx'),
 
     // SYSTEM
+    route('cache-test',              'routes/system/cache-test.tsx'),
     route('sitemap.xml',             'routes/system/sitemap-index.tsx'),
     route('sitemap/:type/:page.xml', 'routes/system/sitemap.tsx'),
 
