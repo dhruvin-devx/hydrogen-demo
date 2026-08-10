@@ -3,15 +3,17 @@ name: Storefront 1000167832
 on:
   push:
     branches:
-      - main        # production deployment (requires PR merge, never direct push)
-      - staging     # staging/preview deployment
+      - main   # production deployment (PR merge only)
+      - uat    # UAT environment deployment
   pull_request:
-    types: [opened, synchronize, reopened]  # preview deployment per PR
+    branches:
+      - main   # PR preview (pre-production) — only PRs targeting main
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
   deployments: write
-  pull-requests: write  # needed to post preview URL comment on PR
+  pull-requests: write
 
 jobs:
   deploy:
@@ -43,23 +45,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Production deploy — only on main branch push (i.e. after PR is merged)
+      # Production — push to main (via merged PR only, enforced by branch protection)
       - name: Deploy to Production
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: npx shopify hydrogen deploy
         env:
           SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000167832 }}
 
-      # Staging deploy — on push to staging branch
-      - name: Deploy to Staging (Preview)
-        if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
-        run: npx shopify hydrogen deploy --preview
+      # UAT — push to uat branch, deployed as preview with --env uat
+      - name: Deploy to UAT
+        if: github.ref == 'refs/heads/uat' && github.event_name == 'push'
+        run: npx shopify hydrogen deploy --env uat
         env:
           SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000167832 }}
 
-      # PR preview deploy — on every pull request
+      # PR Preview — only for PRs targeting main (pre-production preview)
       - name: Deploy PR Preview
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
         run: npx shopify hydrogen deploy --preview
         env:
           SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000167832 }}
