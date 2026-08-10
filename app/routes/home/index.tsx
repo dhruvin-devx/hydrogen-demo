@@ -1,10 +1,6 @@
 import {useLoaderData, Link, data} from 'react-router';
 import type {Route} from './+types/index';
-import {
-  Image,
-  generateCacheControlHeader,
-  CacheLong,
-} from '@shopify/hydrogen';
+import {Image, generateCacheControlHeader, CacheLong} from '@shopify/hydrogen';
 import type {
   FeaturedCollectionFragment,
   RecommendedProductsQuery,
@@ -18,10 +14,9 @@ export const meta: Route.MetaFunction = () => {
 
 export async function loader(args: Route.LoaderArgs) {
   const criticalData = await loadCriticalData(args);
-  return data(
-    criticalData,
-    {headers: {'Cache-Control': generateCacheControlHeader(CacheLong())}},
-  );
+  return data(criticalData, {
+    headers: {'Cache-Control': generateCacheControlHeader(CacheLong())},
+  });
 }
 
 async function loadCriticalData({context}: Route.LoaderArgs) {
@@ -50,20 +45,11 @@ export default function Homepage() {
   return (
     <div className="home">
       {data.isShopLinked ? null : <MockShopNotice />}
-      <p
-        style={{
-          fontSize: 12,
-          color: '#888',
-          fontFamily: 'monospace',
-          margin: '0 0 1rem',
-        }}
-      >
-        server-rendered at: {data.serverRenderedAt} — reload and watch this. If
-        it stays frozen, the page came from the full-page cache; if it changes,
-        the worker re-rendered.
-      </p>
+      <h1>Oziva demo</h1>
       <FeaturedCollection collection={data.featuredCollection} />
-      {data.recommendedProducts && <RecommendedProducts products={data.recommendedProducts} />}
+      {data.recommendedProducts && (
+        <RecommendedProducts products={data.recommendedProducts} />
+      )}
     </div>
   );
 }
@@ -104,7 +90,6 @@ function RecommendedProducts({
       className="recommended-products"
       aria-labelledby="recommended-products"
     >
-      <h1>Oziva stagging new feature Demo</h1>
       <h2 id="recommended-products">Recommended products</h2>
       <div className="recommended-products-grid">
         {products.nodes.map((product) => (
