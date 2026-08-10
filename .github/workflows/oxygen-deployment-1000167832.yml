@@ -1,9 +1,17 @@
 name: Storefront 1000167832
-on: [push]
+
+on:
+  push:
+    branches:
+      - main        # production deployment (requires PR merge, never direct push)
+      - staging     # staging/preview deployment
+  pull_request:
+    types: [opened, synchronize, reopened]  # preview deployment per PR
 
 permissions:
   contents: read
   deployments: write
+  pull-requests: write  # needed to post preview URL comment on PR
 
 jobs:
   deploy:
@@ -35,7 +43,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and Publish to Oxygen
+      # Production deploy — only on main branch push (i.e. after PR is merged)
+      - name: Deploy to Production
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: npx shopify hydrogen deploy
+        env:
+          SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000167832 }}
+
+      # Staging deploy — on push to staging branch
+      - name: Deploy to Staging (Preview)
+        if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+        run: npx shopify hydrogen deploy --preview
+        env:
+          SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000167832 }}
+
+      # PR preview deploy — on every pull request
+      - name: Deploy PR Preview
+        if: github.event_name == 'pull_request'
+        run: npx shopify hydrogen deploy --preview
         env:
           SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000167832 }}
