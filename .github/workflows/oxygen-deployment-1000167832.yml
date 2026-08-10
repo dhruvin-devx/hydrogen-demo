@@ -55,7 +55,7 @@ jobs:
       # UAT — push to uat branch, deployed as preview with --env uat
       - name: Deploy to UAT
         if: github.ref == 'refs/heads/uat' && github.event_name == 'push'
-        run: npx shopify hydrogen deploy --env uat
+        run: npx shopify hydrogen deploy
         env:
           SHOPIFY_HYDROGEN_DEPLOYMENT_TOKEN: ${{ secrets.OXYGEN_DEPLOYMENT_TOKEN_1000167832 }}
 
