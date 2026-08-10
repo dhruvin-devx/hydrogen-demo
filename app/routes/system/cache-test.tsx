@@ -7,9 +7,10 @@ export async function loader() {
     {serverRenderedAt: new Date().toISOString()},
     {
       headers: {
-        // Oxygen reads Cache-Control to decide full-page caching.
-        // public + max-age=3600 + stale-while-revalidate=82800
-        'Cache-Control': generateCacheControlHeader(CacheLong()),
+        // Oxygen full-page cache requires Oxygen-Cache-Control (not Cache-Control).
+        // Vary is also required — without it Oxygen marks the response uncacheable.
+        'Oxygen-Cache-Control': generateCacheControlHeader(CacheLong()),
+        'Vary': 'Accept-Encoding',
       },
     },
   );
