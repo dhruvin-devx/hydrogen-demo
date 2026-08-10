@@ -2,9 +2,8 @@ import * as serverBuild from 'virtual:react-router/server-build';
 import {createRequestHandler, storefrontRedirect} from '@shopify/hydrogen';
 import {createHydrogenRouterContext} from '~/lib/context';
 
-/**
- * Export a fetch handler in module format.
- */
+const pageCache = await caches.open('hydrogen-pages');
+
 export default {
   async fetch(
     request: Request,
@@ -12,16 +11,21 @@ export default {
     executionContext: ExecutionContext,
   ): Promise<Response> {
     try {
+      // Full-page cache: use URL-only cache key so the session cookie in the
+      // request doesn't bypass the cache (Cloudflare skips cache for any
+      // request that carries a Cookie header when using its default behaviour).
+      const cacheKey = new Request(request.url);
+      if (request.method === 'GET') {
+        const cached = await pageCache.match(cacheKey);
+        if (cached) return cached;
+      }
+
       const hydrogenContext = await createHydrogenRouterContext(
         request,
         env,
         executionContext,
       );
 
-      /**
-       * Create a Hydrogen request handler that internally
-       * delegates to React Router for routing and rendering.
-       */
       const handleRequest = createRequestHandler({
         build: serverBuild,
         mode: process.env.NODE_ENV,
@@ -38,16 +42,22 @@ export default {
       }
 
       if (response.status === 404) {
-        /**
-         * Check for redirects only when there's a 404 from the app.
-         * If the redirect doesn't exist, then `storefrontRedirect`
-         * will pass through the 404 response.
-         */
         return storefrontRedirect({
           request,
           response,
           storefront: hydrogenContext.storefront,
         });
+      }
+
+      // Store in page cache only when safe: GET, no Set-Cookie (not personalized),
+      // and the route opted into caching via Cache-Control max-age.
+      if (
+        request.method === 'GET' &&
+        response.status === 200 &&
+        !response.headers.has('Set-Cookie') &&
+        response.headers.get('Cache-Control')?.includes('max-age')
+      ) {
+        executionContext.waitUntil(pageCache.put(cacheKey, response.clone()));
       }
 
       return response;
