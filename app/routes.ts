@@ -2,6 +2,9 @@ import {type RouteConfig, route, layout, index} from '@react-router/dev/routes';
 import {hydrogenRoutes} from '@shopify/hydrogen';
 
 export default hydrogenRoutes([
+  // API proxy route — outside the locale wrapper (no locale prefix needed)
+  route('api/reviews', 'routes/api/reviews.ts'),
+
   // Locale layout — optional /:locale? prefix wraps everything
   route(':locale?', 'routes/($locale).tsx', [
     // HOME
@@ -9,6 +12,9 @@ export default hydrogenRoutes([
 
     // DEMO — lazy-loading / streaming demonstration
     route('lazy-demo', 'routes/system/lazy-demo.tsx'),
+
+    // DEMO — third-party API / credential isolation demonstration
+    route('reviews-demo', 'routes/reviews-demo/index.tsx'),
 
     // CATALOG
     route('products/:handle',    'routes/catalog/products/$handle.tsx'),

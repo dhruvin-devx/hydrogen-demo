@@ -89,8 +89,6 @@ export default function Product() {
     getAdjacentAndFirstAvailableVariants(product),
   );
 
-  console.log('Optimistic Variant', selectedVariant);
-
   // Sets the search param to the selected variant without navigation
   // only when no search params are set in the url
   useSelectedOptionInUrlParam(selectedVariant.selectedOptions);
@@ -105,6 +103,7 @@ export default function Product() {
 
   return (
     <div className="product">
+      <h1>PDP revamped</h1>
       <ProductImage image={selectedVariant?.image} />
       <div className="product-main">
         <h1>{title}</h1>
