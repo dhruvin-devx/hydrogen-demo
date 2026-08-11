@@ -2,15 +2,22 @@ import {data} from 'react-router';
 import {useLoaderData} from 'react-router';
 import {generateCacheControlHeader, CacheLong} from '@shopify/hydrogen';
 
+export function headers() {
+  return {
+    'Oxygen-Cache-Control':
+      'public, max-age=3600, stale-while-revalidate=86400',
+    Vary: 'Accept-Encoding',
+  };
+}
+
 export async function loader() {
   return data(
     {serverRenderedAt: new Date().toISOString()},
     {
       headers: {
-        // Oxygen full-page cache requires Oxygen-Cache-Control (not Cache-Control).
-        // Vary is also required — without it Oxygen marks the response uncacheable.
-        'Oxygen-Cache-Control': generateCacheControlHeader(CacheLong()),
-        'Vary': 'Accept-Encoding',
+        'Oxygen-Cache-Control':
+          'public, max-age=3600, stale-while-revalidate=86400',
+        Vary: 'Accept-Encoding',
       },
     },
   );
@@ -33,8 +40,8 @@ export default function CacheTest() {
         request (cache miss or bypass).
       </p>
       <p style={{color: '#888', fontSize: '0.875rem'}}>
-        Check <code>CF-Cache-Status</code> and{' '}
-        <code>Cache-Control</code> in DevTools → Network → response headers.
+        Check <code>CF-Cache-Status</code> and <code>Cache-Control</code> in
+        DevTools → Network → response headers.
       </p>
     </div>
   );
