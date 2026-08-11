@@ -12,11 +12,17 @@ export const meta: Route.MetaFunction = () => {
   return [{title: 'Hydrogen | Home'}];
 };
 
+export function headers() {
+  return {
+    'Oxygen-Cache-Control':
+      'public, max-age=3600, stale-while-revalidate=86400',
+    Vary: 'Accept-Encoding',
+  };
+}
+
 export async function loader(args: Route.LoaderArgs) {
   const criticalData = await loadCriticalData(args);
-  return data(criticalData, {
-    headers: {'Cache-Control': generateCacheControlHeader(CacheLong())},
-  });
+  return data(criticalData);
 }
 
 async function loadCriticalData({context}: Route.LoaderArgs) {
