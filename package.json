@@ -11,7 +11,8 @@
     "lint": "eslint --no-error-on-unmatched-pattern .",
     "typecheck": "react-router typegen && tsc --noEmit",
     "codegen": "shopify hydrogen codegen && react-router typegen",
-    "review": "node --experimental-strip-types review-server/index.ts"
+    "review": "node --experimental-strip-types review-server/index.ts",
+    "prepare": "husky"
   },
   "prettier": "@shopify/prettier-config",
   "dependencies": {
@@ -58,7 +59,9 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "globals": "^15.14.0",
     "graphql-config": "^5.0.3",
-    "prettier": "^3.4.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.9.6",
     "typescript": "^5.9.2",
     "vite": "^8.0.1"
   },
@@ -67,5 +70,8 @@
   },
   "browserslist": [
     "defaults"
-  ]
+  ],
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,css,json,graphql}": "prettier --write"
+  }
 }

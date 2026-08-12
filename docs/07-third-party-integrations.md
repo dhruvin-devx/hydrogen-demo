@@ -11,125 +11,106 @@ Hydrogen can integrate any third-party service that exposes an API. The key patt
 
 ## Credential Isolation — Keeping API Keys Off the Browser
 
-The single most important rule when integrating any third-party API is that **credentials (API keys, secret tokens, bearer tokens) must never reach the browser**. If a key appears in a browser Network request — even in a POST body — it is exposed to anyone who opens DevTools.
+The single most important rule when integrating any third-party API: **credentials must never reach the browser**. Hydrogen enforces this naturally — `loader()` and `action()` always run on the server. The API key lives in `context.env` and is never serialised into any browser response.
 
-Hydrogen enforces this naturally because all `loader()` and `action()` functions run on the server. The two patterns below demonstrate this with a working implementation you can run locally.
-
-### Live Demo
-
-The file `review-server/index.ts` is a standalone Node.js server that simulates a third-party review API with key-based auth. The Hydrogen app calls it server-side using two different patterns.
+### The core principle
 
 ```
-# Terminal 1 — start the standalone "third-party" review server
-node --experimental-strip-types review-server/index.ts
+loader()  → runs on server → reads context.env → calls upstream API
+action()  → runs on server → reads context.env → calls upstream API
 
-# Terminal 2 — start Hydrogen dev server
-npm run dev
+In both cases the browser only ever receives the result — not the key.
 ```
 
-Then visit **`http://localhost:3000/reviews-demo`** and open DevTools → Network. In every browser request you will see:
-
-| Request | From | `x-api-key` header? |
-|---------|------|---------------------|
-| Page HTML (`/reviews-demo`) | browser | ✗ never |
-| `/api/reviews` (fetcher) | browser | ✗ never |
-| `http://localhost:3001/api/reviews` | **server only** | ✓ yes |
+This holds regardless of how the route is triggered:
+- Full page load → `loader()` runs server-side
+- `<Form method="post">` → `action()` runs server-side
+- `useFetcher.load(...)` → route's `loader()` runs server-side
+- `useFetcher.Form action="/some-route"` → that route's `action()` runs server-side
 
 ---
 
-### Pattern 1 — Direct server-side call in `loader()` / `action()`
+### Live Demo
 
-Use this when you need the data **before the page renders** (above the fold, SEO-critical).
+The file `review-server/index.ts` is a standalone Node.js server simulating a third-party API with key-based auth.
+
+```bash
+# Terminal 1 — third-party review server
+node --experimental-strip-types review-server/index.ts
+
+# Terminal 2 — Hydrogen dev server
+npm run dev
+```
+
+Visit `http://localhost:3000/reviews-demo` → DevTools → Network → search `x-api-key`.
+
+| Request | Initiated by | `x-api-key` visible? |
+|---------|-------------|----------------------|
+| `/reviews-demo` page load | browser | ✗ |
+| `/api/reviews?productId=x` (fetcher load) | browser | ✗ |
+| `http://localhost:3001/api/reviews` | **server only** | ✓ (server-to-server) |
+
+---
+
+### Pattern 1 — `loader()` for reads, `action()` for writes
+
+Use when you need data in the initial HTML (SSR, SEO), or want the simplest possible setup.
 
 ```
-browser → Hydrogen (loader) → third-party API → back to browser as HTML
-                  ↑
-         API key injected here (server only)
+Read:   browser → loader() on server → upstream API → HTML to browser
+Write:  browser <Form> → action() on server → upstream API → response
 ```
 
 ```ts
-import type {LoaderFunctionArgs, ActionFunctionArgs} from 'react-router';
-
+// app/routes/reviews-demo/index.tsx
 export async function loader({request, context}: LoaderFunctionArgs) {
-  // ⚠️  Use context.env — NOT process.env.
-  //    Hydrogen runs in a Workers runtime (mini-oxygen) where process.env
-  //    is undefined. Using it silently produces an empty API key, causing
-  //    the upstream server to reject with 401. Hydrogen then intercepts that
-  //    401 as an auth challenge and redirects to the login page.
+  // ⚠️  context.env — not process.env (undefined in Workers runtime)
   const {REVIEW_API_URL = 'http://localhost:3001', REVIEW_API_KEY = ''} =
     context.env as Env;
 
-  const url = new URL(request.url);
-  const productId = url.searchParams.get('productId') ?? 'the-complete-snowboard';
-
-  const res = await fetch(
-    `${REVIEW_API_URL}/api/reviews?productId=${encodeURIComponent(productId)}`,
-    {headers: {'x-api-key': REVIEW_API_KEY}}, // key injected here, server-side only
-  );
-
-  const payload = await res.json();
-  return {reviews: payload.reviews ?? [], productId};
+  const res = await fetch(`${REVIEW_API_URL}/api/reviews?productId=...`, {
+    headers: {'x-api-key': REVIEW_API_KEY}, // server-side only
+  });
+  return {reviews: (await res.json()).reviews ?? []};
 }
 
 export async function action({request, context}: ActionFunctionArgs) {
   const {REVIEW_API_URL = 'http://localhost:3001', REVIEW_API_KEY = ''} =
     context.env as Env;
-
   const fd = await request.formData();
 
   const res = await fetch(`${REVIEW_API_URL}/api/reviews`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': REVIEW_API_KEY,
-    },
+    headers: {'Content-Type': 'application/json', 'x-api-key': REVIEW_API_KEY},
     body: JSON.stringify(Object.fromEntries(fd)),
   });
-
   return res.json();
 }
 ```
 
-**In the component** — a plain `<Form method="post">` triggers `action()` on the server:
-
 ```tsx
-export default function ReviewsPage() {
-  const {reviews} = useLoaderData<typeof loader>();
-
-  return (
-    <>
-      {/* Reviews were fetched in loader — no browser network call */}
-      <ReviewList reviews={reviews} />
-
-      {/* Form POST goes to action() on server — API key stays hidden */}
-      <Form method="post">
-        <input name="productId" value={productId} type="hidden" />
-        <input name="author" required />
-        <select name="rating">{/* options */}</select>
-        <textarea name="comment" required />
-        <button type="submit">Submit</button>
-      </Form>
-    </>
-  );
-}
+// Component — <Form> triggers action() on the server, no proxy needed
+<Form method="post">
+  <input type="hidden" name="productId" value={productId} />
+  <input name="author" required />
+  <button type="submit">Submit</button>
+</Form>
 ```
-
-**When to use:**
-- Page data that must be in the initial HTML (SSR / SEO)
-- Form submissions that need a full-page response (redirect after POST)
-- Simpler components with no need for incremental client-side updates
 
 ---
 
 ### Pattern 2 — `useFetcher` without a proxy route
 
-Use this when you need to **fetch or submit data client-side without a full navigation** — e.g. loading reviews lazily, submitting without a page reload, or polling.
+Use when you need lazy/client-side loading or submit without page navigation. The key insight: **`useFetcher` can target any route's `action()` via the `action` prop — that action still runs server-side**.
+
+You do NOT need a separate proxy route just because you're using a fetcher.
 
 ```
-browser → /api/reviews (Hydrogen proxy) → third-party API
-               ↑
-      API key injected here (server only)
-      Browser only ever calls /api/reviews — no key visible
+Read:   useFetcher.load('/api/reviews') → GET resource route → server → upstream
+Write:  useFetcher.Form action="/reviews-demo" → page action() → server → upstream
+                                                      ↑
+                               Same action() as Pattern 1 — runs on the server.
+                               No proxy route, no CSRF tokens needed.
 ```
 
 **Resource route for reads** (`app/routes/api/reviews.ts`) — GET only, no write action:
