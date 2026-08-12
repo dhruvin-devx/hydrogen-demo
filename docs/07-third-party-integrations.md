@@ -47,8 +47,6 @@ browser → Hydrogen (loader) → third-party API → back to browser as HTML
          API key injected here (server only)
 ```
 
-**Implementation** (`app/routes/reviews-demo/index.tsx`):
-
 ```ts
 import type {LoaderFunctionArgs, ActionFunctionArgs} from 'react-router';
 
@@ -123,7 +121,7 @@ export default function ReviewsPage() {
 
 ---
 
-### Pattern 2 — `useFetcher` + server-side proxy route
+### Pattern 2 — `useFetcher` without a proxy route
 
 Use this when you need to **fetch or submit data client-side without a full navigation** — e.g. loading reviews lazily, submitting without a page reload, or polling.
 
@@ -134,76 +132,38 @@ browser → /api/reviews (Hydrogen proxy) → third-party API
       Browser only ever calls /api/reviews — no key visible
 ```
 
-**Step 1 — create a thin proxy route** (`app/routes/api/reviews.ts`):
+**Resource route for reads** (`app/routes/api/reviews.ts`) — GET only, no write action:
 
 ```ts
-import type {LoaderFunctionArgs, ActionFunctionArgs} from 'react-router';
-
-// GET /api/reviews?productId=<handle>
+// Only a loader — writes go to the page's action(), not here
 export async function loader({request, context}: LoaderFunctionArgs) {
-  // ⚠️  Always use context.env in Hydrogen's Workers runtime.
-  //    process.env is NOT available in mini-oxygen and silently returns undefined,
-  //    which causes the API key to be empty and the upstream server to reject with 401.
   const {REVIEW_API_URL = 'http://localhost:3001', REVIEW_API_KEY = ''} =
     context.env as Env;
-
-  const url = new URL(request.url);
-  const productId = url.searchParams.get('productId');
-  if (!productId) return Response.json({error: 'productId required'}, {status: 400});
-
+  const productId = new URL(request.url).searchParams.get('productId');
   const upstream = await fetch(
-    `${REVIEW_API_URL}/api/reviews?productId=${encodeURIComponent(productId)}`,
+    `${REVIEW_API_URL}/api/reviews?productId=${productId}`,
     {headers: {'x-api-key': REVIEW_API_KEY}},
   );
   return Response.json(await upstream.json(), {status: upstream.status});
 }
-
-// POST /api/reviews
-export async function action({request, context}: ActionFunctionArgs) {
-  const {REVIEW_API_URL = 'http://localhost:3001', REVIEW_API_KEY = ''} =
-    context.env as Env;
-
-  const fd = await request.formData();
-  const body = Object.fromEntries(fd.entries());
-  if (body.rating) body.rating = Number(body.rating);
-
-  const upstream = await fetch(`${REVIEW_API_URL}/api/reviews`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': REVIEW_API_KEY, // injected server-side — never reaches the browser
-    },
-    body: JSON.stringify(body),
-  });
-  return Response.json(await upstream.json(), {status: upstream.status});
-}
+// No action export — there is no public write endpoint at /api/reviews
 ```
 
-**Step 2 — register the route** outside the locale wrapper in `app/routes.ts`:
-
-```ts
-export default hydrogenRoutes([
-  route('api/reviews', 'routes/api/reviews.ts'), // ← before locale wrapper
-  route(':locale?', '...', [...]),
-]);
-```
-
-**Step 3 — use `useFetcher` in the component**:
+**Component** — reads from resource route, writes to page action:
 
 ```tsx
 function FetcherReviewSection({productId}: {productId: string}) {
   const loadFetcher = useFetcher<{reviews: Review[]; total: number}>();
   const submitFetcher = useFetcher<{success?: boolean; error?: string}>();
 
-  // Load reviews without navigating — browser calls /api/reviews (no API key visible)
   useEffect(() => {
-    loadFetcher.load(`/api/reviews?productId=${encodeURIComponent(productId)}`);
+    // GET — calls the /api/reviews loader server-side
+    loadFetcher.load(`/api/reviews?productId=${productId}`);
   }, [productId]);
 
-  // Reload after submit
   useEffect(() => {
     if (submitFetcher.state === 'idle' && submitFetcher.data?.success) {
-      loadFetcher.load(`/api/reviews?productId=${encodeURIComponent(productId)}`);
+      loadFetcher.load(`/api/reviews?productId=${productId}`);
     }
   }, [submitFetcher.state]);
 
@@ -211,26 +171,27 @@ function FetcherReviewSection({productId}: {productId: string}) {
     <>
       <ReviewList reviews={loadFetcher.data?.reviews ?? []} />
 
-      {/* submitFetcher.Form posts to /api/reviews (proxy) — key stays server-side */}
-      <submitFetcher.Form method="post" action="/api/reviews">
+      {/*
+        action="/reviews-demo" → calls the reviews-demo page's action() on the server.
+        The browser POSTs to /reviews-demo. The action runs server-side.
+        API key is added there. No /api/reviews write endpoint exists.
+      */}
+      <submitFetcher.Form method="post" action="/reviews-demo">
         <input type="hidden" name="productId" value={productId} />
         <input name="author" required />
-        <select name="rating">{/* options */}</select>
-        <textarea name="comment" required />
-        <button type="submit" disabled={submitFetcher.state !== 'idle'}>
-          {submitFetcher.state !== 'idle' ? 'Submitting…' : 'Submit'}
-        </button>
+        <button type="submit">Submit</button>
       </submitFetcher.Form>
     </>
   );
 }
 ```
 
-**When to use:**
-- Lazy-loaded sections (below the fold, not needed for first paint)
-- Optimistic UI / instant feedback without page reload
-- Polling or triggered loads (e.g. "load more", tab switch)
-- Components that manage their own data lifecycle
+**When you DO need a separate proxy route with a POST action:**
+- The endpoint is called from multiple unrelated pages
+- An external service (webhook, mobile app) needs to POST to it
+- You intentionally want a public JSON API
+
+For a single-page use case, skip the proxy and use the page's `action()` directly.
 
 ---
 
@@ -256,22 +217,25 @@ REVIEW_API_URL=http://localhost:3001
 REVIEW_API_KEY=REVIEW-API-KEY-SECRET-123
 ```
 
-These values are read via `process.env` in `loader()` / `action()` — they live only in the server bundle and are never serialised into any browser response.
+These values are read via `context.env` in `loader()` / `action()` — they live only in the server bundle and are never serialised into any browser response. (`process.env` does not work in the Hydrogen Workers runtime — see the pitfall section below.)
 
 ---
 
 ### Pattern Comparison
 
-| | Pattern 1 (loader/action) | Pattern 2 (fetcher + proxy) |
-|-|---------------------------|------------------------------|
-| **API key location** | server bundle only | server bundle only |
-| **Browser sees** | rendered HTML / redirect | JSON from `/api/reviews` |
-| **Initial load** | blocking (in first HTML) | lazy / on-demand |
-| **Submit UX** | full-page (or redirect) | no navigation, instant |
-| **Complexity** | minimal | slightly more (proxy route + fetcher) |
-| **Best for** | SSR / SEO data, simple forms | lazy sections, optimistic UI |
+| | Pattern 1 — loader + Form | Pattern 2 — useFetcher |
+|-|---------------------------|------------------------|
+| **API key location** | `context.env` — server only | `context.env` — server only |
+| **Reads** | SSR — in initial HTML | Lazy via `useFetcher.load('/api/reviews')` |
+| **Writes** | `<Form>` → page `action()` | `useFetcher.Form action="/reviews-demo"` → same `action()` |
+| **Proxy route needed?** | No | No — write goes to page action, not a proxy |
+| **Extra CSRF token?** | No | No — action() is server-side by definition |
+| **Submit UX** | Full page re-render | No navigation, instant feedback |
+| **Best for** | SSR / SEO, simple forms | Lazy sections, optimistic UI |
 
 Both patterns guarantee the API key is **never visible in any browser Network request**.
+
+The only reason to create a separate route with a POST `action()` is when the endpoint must be shared across multiple pages or called by external services. For a single page, use the page's own `action()`.
 
 ---
 
