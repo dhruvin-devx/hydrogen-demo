@@ -35,19 +35,35 @@ export default {
       }
 
       if (isPublicPage) {
-        // Hydrogen's storefront client always forwards Set-Cookie headers from
-        // Storefront API subrequests into the Worker response via
-        // setCollectedSubrequestHeaders() (collectTrackingInformation=true by default).
-        // Oxygen exempts _shopify_y and _shopify_s but _shopify_essential is NOT on
-        // that list — any Worker response that sets it is marked uncacheable.
-        // Strip it here; Shopify's edge re-establishes it per user from request context.
+        // Hydrogen's storefront client forwards Set-Cookie headers from Storefront
+        // API subrequests into the Worker response via setCollectedSubrequestHeaders()
+        // (collectTrackingInformation=true by default). Any Set-Cookie makes Oxygen
+        // mark the response uncacheable.
+        //
+        // These per-user Shopify cookies MUST be stripped on cached pages for two
+        // reasons: (1) they trigger the uncacheable flag, and (2) a cached response is
+        // shared byte-for-byte across all visitors, so baking one user's _shopify_y
+        // visitor ID into the cached HTML would assign every visitor the SAME id and
+        // poison analytics. Shopify's client-side Analytics.Provider regenerates these
+        // per-browser (events go directly to monorail-edge.shopifysvc.com), so dropping
+        // the server-set versions is correct, not just a workaround.
+        const SHOPIFY_MANAGED_COOKIE_PREFIXES = [
+          '_shopify_essential=',
+          '_shopify_y=',
+          '_shopify_s=',
+          '_shopify_analytics=',
+          '_shopify_marketing=',
+        ];
         const allCookies = response.headers.getSetCookie();
-        const withoutEssential = allCookies.filter(
-          (c) => !c.startsWith('_shopify_essential='),
+        const keptCookies = allCookies.filter(
+          (cookie) =>
+            !SHOPIFY_MANAGED_COOKIE_PREFIXES.some((prefix) =>
+              cookie.startsWith(prefix),
+            ),
         );
-        if (withoutEssential.length !== allCookies.length) {
+        if (keptCookies.length !== allCookies.length) {
           response.headers.delete('set-cookie');
-          for (const cookie of withoutEssential) {
+          for (const cookie of keptCookies) {
             response.headers.append('set-cookie', cookie);
           }
         }
