@@ -24,10 +24,17 @@ export default {
       const response = await handleRequest(request);
 
       if (hydrogenContext.session.isPending) {
-        response.headers.set(
-          'Set-Cookie',
-          await hydrogenContext.session.commit(),
-        );
+        // Never commit the session on publicly cached pages. Any Set-Cookie in the
+        // response marks the page uncacheable for Oxygen, even if the cookie is just
+        // a stale session write. Public pages must not carry user-specific headers.
+        const oxygenCacheControl =
+          response.headers.get('Oxygen-Cache-Control') ?? '';
+        if (!oxygenCacheControl.includes('public')) {
+          response.headers.set(
+            'Set-Cookie',
+            await hydrogenContext.session.commit(),
+          );
+        }
       }
 
       if (response.status === 404) {
