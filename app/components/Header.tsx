@@ -1,28 +1,23 @@
 import {Suspense} from 'react';
-import {Await, NavLink, useAsyncValue} from 'react-router';
+import {Await, NavLink} from 'react-router';
 import {
   type CartViewPayload,
   useAnalytics,
   useOptimisticCart,
 } from '@shopify/hydrogen';
-import type {HeaderQuery, CartApiQueryFragment} from 'storefrontapi.generated';
+import type {HeaderQuery} from 'storefrontapi.generated';
 import {useAside} from '~/components/Aside';
+import {useCart} from '~/components/CartProvider';
 
 interface HeaderProps {
   header: HeaderQuery;
-  cart: Promise<CartApiQueryFragment | null>;
   isLoggedIn: Promise<boolean>;
   publicStoreDomain: string;
 }
 
 type Viewport = 'desktop' | 'mobile';
 
-export function Header({
-  header,
-  isLoggedIn,
-  cart,
-  publicStoreDomain,
-}: HeaderProps) {
+export function Header({header, isLoggedIn, publicStoreDomain}: HeaderProps) {
   const {shop, menu} = header;
   return (
     <header className="header">
@@ -35,7 +30,7 @@ export function Header({
         primaryDomainUrl={header.shop.primaryDomain.url}
         publicStoreDomain={publicStoreDomain}
       />
-      <HeaderCtas isLoggedIn={isLoggedIn} cart={cart} />
+      <HeaderCtas isLoggedIn={isLoggedIn} />
     </header>
   );
 }
@@ -95,10 +90,7 @@ export function HeaderMenu({
   );
 }
 
-function HeaderCtas({
-  isLoggedIn,
-  cart,
-}: Pick<HeaderProps, 'isLoggedIn' | 'cart'>) {
+function HeaderCtas({isLoggedIn}: Pick<HeaderProps, 'isLoggedIn'>) {
   return (
     <nav className="header-ctas" role="navigation">
       <HeaderMenuMobileToggle />
@@ -110,7 +102,7 @@ function HeaderCtas({
         </Suspense>
       </NavLink>
       <SearchToggle />
-      <CartToggle cart={cart} />
+      <CartToggle />
     </nav>
   );
 }
@@ -159,18 +151,8 @@ function CartBadge({count}: {count: number}) {
   );
 }
 
-function CartToggle({cart}: Pick<HeaderProps, 'cart'>) {
-  return (
-    <Suspense fallback={<CartBadge count={0} />}>
-      <Await resolve={cart}>
-        <CartBanner />
-      </Await>
-    </Suspense>
-  );
-}
-
-function CartBanner() {
-  const originalCart = useAsyncValue() as CartApiQueryFragment | null;
+function CartToggle() {
+  const originalCart = useCart();
   const cart = useOptimisticCart(originalCart);
   return <CartBadge count={cart?.totalQuantity ?? 0} />;
 }

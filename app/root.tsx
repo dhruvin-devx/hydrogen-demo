@@ -17,6 +17,13 @@ import resetStyles from '~/styles/reset.css?url';
 import appStyles from '~/styles/app.css?url';
 import tailwindCss from './styles/tailwind.css?url';
 import {PageLayout} from './components/PageLayout';
+import {CartProvider} from '~/components/CartProvider';
+
+// Cart is loaded client-side by CartProvider; this stable null-Promise satisfies
+// Analytics.Provider's required cart prop without streaming user-specific data
+// through the server response (which would bust public Oxygen page caching).
+// Promise<null> is assignable to Promise<CartReturn<Cart> | null> — no cast needed.
+const NULL_CART = Promise.resolve(null);
 
 export type RootLoader = typeof loader;
 
@@ -120,7 +127,7 @@ async function loadCriticalData({context}: Route.LoaderArgs) {
  * Make sure to not throw any errors here, as it will cause the page to 500.
  */
 function loadDeferredData({context}: Route.LoaderArgs) {
-  const {storefront, customerAccount, cart} = context;
+  const {storefront, customerAccount} = context;
 
   // defer the footer query (below the fold)
   const footer = storefront
@@ -136,7 +143,6 @@ function loadDeferredData({context}: Route.LoaderArgs) {
       return null;
     });
   return {
-    cart: cart.get(),
     isLoggedIn: customerAccount.isLoggedIn(),
     footer,
   };
@@ -173,15 +179,17 @@ export default function App() {
   }
 
   return (
-    <Analytics.Provider
-      cart={data.cart}
-      shop={data.shop}
-      consent={data.consent}
-    >
-      <PageLayout {...data}>
-        <Outlet />
-      </PageLayout>
-    </Analytics.Provider>
+    <CartProvider>
+      <Analytics.Provider
+        cart={NULL_CART}
+        shop={data.shop}
+        consent={data.consent}
+      >
+        <PageLayout {...data}>
+          <Outlet />
+        </PageLayout>
+      </Analytics.Provider>
+    </CartProvider>
   );
 }
 
