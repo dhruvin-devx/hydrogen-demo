@@ -127,7 +127,7 @@ async function loadCriticalData({context}: Route.LoaderArgs) {
  * Make sure to not throw any errors here, as it will cause the page to 500.
  */
 function loadDeferredData({context}: Route.LoaderArgs) {
-  const {storefront, customerAccount} = context;
+  const {storefront} = context;
 
   // defer the footer query (below the fold)
   const footer = storefront
@@ -142,10 +142,7 @@ function loadDeferredData({context}: Route.LoaderArgs) {
       console.error(error);
       return null;
     });
-  return {
-    isLoggedIn: customerAccount.isLoggedIn(),
-    footer,
-  };
+  return {footer};
 }
 
 export function Layout({children}: {children?: React.ReactNode}) {

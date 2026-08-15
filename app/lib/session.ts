@@ -5,20 +5,30 @@ import {
   type Session,
 } from 'react-router';
 
-/**
- * This is a custom session implementation for your Hydrogen shop.
- * Feel free to customize it to your needs, add helper methods, or
- * swap out the cookie-based implementation with something else!
- */
 export class AppSession implements HydrogenSession {
   public isPending = false;
 
-  #sessionStorage;
-  #session;
+  #sessionStorage: SessionStorage;
+  #session: Session;
+  // Pre-created wrappers so that ACCESSING session.set/session.unset (e.g. via
+  // destructuring inside Hydrogen's customer-account client) does not prematurely
+  // set isPending = true. isPending is only set when the wrapper is actually called.
+  #setFn: Session['set'];
+  #unsetFn: Session['unset'];
 
   constructor(sessionStorage: SessionStorage, session: Session) {
     this.#sessionStorage = sessionStorage;
     this.#session = session;
+
+    this.#setFn = (...args: Parameters<Session['set']>) => {
+      this.isPending = true;
+      return session.set(...args);
+    };
+
+    this.#unsetFn = (...args: Parameters<Session['unset']>) => {
+      this.isPending = true;
+      return session.unset(...args);
+    };
   }
 
   static async init(request: Request, secrets: string[]) {
@@ -52,13 +62,11 @@ export class AppSession implements HydrogenSession {
   }
 
   get unset() {
-    this.isPending = true;
-    return this.#session.unset;
+    return this.#unsetFn;
   }
 
   get set() {
-    this.isPending = true;
-    return this.#session.set;
+    return this.#setFn;
   }
 
   destroy() {

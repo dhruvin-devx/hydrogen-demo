@@ -5,6 +5,7 @@ export default hydrogenRoutes([
   // API proxy routes — outside the locale wrapper (no locale prefix needed)
   route('api/reviews', 'routes/api/reviews.ts'),
   route('api/cart', 'routes/api/cart.ts'),
+  route('api/auth/status', 'routes/api/auth/status.ts'),
 
   // Locale layout — optional /:locale? prefix wraps everything
   route(':locale?', 'routes/($locale).tsx', [
