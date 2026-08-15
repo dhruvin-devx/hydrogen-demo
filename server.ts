@@ -23,17 +23,33 @@ export default {
 
       const response = await handleRequest(request);
 
-      if (hydrogenContext.session.isPending) {
-        // Never commit the session on publicly cached pages. Any Set-Cookie in the
-        // response marks the page uncacheable for Oxygen, even if the cookie is just
-        // a stale session write. Public pages must not carry user-specific headers.
-        const oxygenCacheControl =
-          response.headers.get('Oxygen-Cache-Control') ?? '';
-        if (!oxygenCacheControl.includes('public')) {
-          response.headers.set(
-            'Set-Cookie',
-            await hydrogenContext.session.commit(),
-          );
+      const oxygenCacheControl =
+        response.headers.get('Oxygen-Cache-Control') ?? '';
+      const isPublicPage = oxygenCacheControl.includes('public');
+
+      if (hydrogenContext.session.isPending && !isPublicPage) {
+        response.headers.set(
+          'Set-Cookie',
+          await hydrogenContext.session.commit(),
+        );
+      }
+
+      if (isPublicPage) {
+        // Hydrogen's storefront client always forwards Set-Cookie headers from
+        // Storefront API subrequests into the Worker response via
+        // setCollectedSubrequestHeaders() (collectTrackingInformation=true by default).
+        // Oxygen exempts _shopify_y and _shopify_s but _shopify_essential is NOT on
+        // that list — any Worker response that sets it is marked uncacheable.
+        // Strip it here; Shopify's edge re-establishes it per user from request context.
+        const allCookies = response.headers.getSetCookie();
+        const withoutEssential = allCookies.filter(
+          (c) => !c.startsWith('_shopify_essential='),
+        );
+        if (withoutEssential.length !== allCookies.length) {
+          response.headers.delete('set-cookie');
+          for (const cookie of withoutEssential) {
+            response.headers.append('set-cookie', cookie);
+          }
         }
       }
 
